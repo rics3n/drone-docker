@@ -52,10 +52,9 @@ func main() {
 	go func() {
 		args := []string{"-d"}
 
-		// STORAGE DRIVER DISALBED FOR NOW
-		// if len(vargs.Storage) != 0 {
-		// 	args = append(args, "-s", vargs.Storage)
-		// }
+		if len(vargs.Storage) != 0 {
+			args = append(args, "-s", vargs.Storage)
+		}
 		if vargs.Insecure && len(vargs.Registry) != 0 {
 			args = append(args, "--insecure-registry", vargs.Registry)
 		}
@@ -65,8 +64,13 @@ func main() {
 		}
 
 		cmd := exec.Command("docker", args...)
-		cmd.Stdout = ioutil.Discard
-		cmd.Stderr = ioutil.Discard
+		if os.Getenv("DOCKER_LAUNCH_DEBUG") == "true" {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		} else {
+			cmd.Stdout = ioutil.Discard
+			cmd.Stderr = ioutil.Discard
+		}
 		trace(cmd)
 		cmd.Run()
 	}()
