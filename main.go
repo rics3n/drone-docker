@@ -35,52 +35,9 @@ func main() {
 	plugin.Param("vargs", &vargs)
 	plugin.MustParse()
 
-	// Set the storage driver
-	if len(vargs.Storage) == 0 {
-		vargs.Storage = "aufs"
-	}
-
-	stop := func() {
-		cmd := exec.Command("start-stop-daemon", "--stop", "--pidfile", "/var/run/docker.pid")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		trace(cmd)
-		cmd.Run()
-	}
-	defer stop()
-
-	// Starts the Docker daemon
-	go func() {
-		cmd := exec.Command("/bin/bash", "/bin/wrapdocker")
-		cmd.Stdout = ioutil.Discard
-		cmd.Stderr = ioutil.Discard
-		cmd.Run()
-
-		args := []string{"daemon", "-s", vargs.Storage}
-
-		if vargs.Insecure && len(vargs.Registry) != 0 {
-			args = append(args, "--insecure-registry", vargs.Registry)
-		}
-
-		for _, value := range vargs.Dns {
-			args = append(args, "--dns", value)
-		}
-
-		cmd = exec.Command("docker", args...)
-		cmd.Stdout = ioutil.Discard
-		cmd.Stderr = ioutil.Discard
-		trace(cmd)
-		cmd.Run()
-	}()
-
-	// Sleep for a few seconds
-	time.Sleep(5 * time.Second)
-
 	// Set the Registry value
 	if len(vargs.Registry) == 0 {
 		vargs.Registry = "https://index.docker.io/v1/"
-	} else {
-		vargs.Repo = fmt.Sprintf("%s/%s", vargs.Registry, vargs.Repo)
 	}
 	// Set the Dockerfile path
 	if len(vargs.File) == 0 {
@@ -92,6 +49,40 @@ func main() {
 	}
 	vargs.Repo = fmt.Sprintf("%s:%s", vargs.Repo, vargs.Tag)
 
+	go func() {
+		args := []string{"-d"}
+
+		// STORAGE DRIVER DISALBED FOR NOW
+		// if len(vargs.Storage) != 0 {
+		// 	args = append(args, "-s", vargs.Storage)
+		// }
+		if vargs.Insecure && len(vargs.Registry) != 0 {
+			args = append(args, "--insecure-registry", vargs.Registry)
+		}
+
+		for _, value := range vargs.Dns {
+			args = append(args, "--dns", value)
+		}
+
+		cmd := exec.Command("docker", args...)
+		cmd.Stdout = ioutil.Discard
+		cmd.Stderr = ioutil.Discard
+		trace(cmd)
+		cmd.Run()
+	}()
+
+	// ping Docker until available
+	for i := 0; i < 3; i++ {
+		cmd := exec.Command("docker", "info")
+		cmd.Stdout = ioutil.Discard
+		cmd.Stderr = ioutil.Discard
+		err := cmd.Run()
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second * 5)
+	}
+
 	// Login to Docker
 	if len(vargs.Username) != 0 {
 		cmd := exec.Command("docker", "login", "-u", vargs.Username, "-p", vargs.Password, "-e", vargs.Email, vargs.Registry)
@@ -100,7 +91,6 @@ func main() {
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
 		if err != nil {
-			stop()
 			os.Exit(1)
 		}
 	} else {
@@ -127,8 +117,11 @@ func main() {
 	trace(cmd)
 	err := cmd.Run()
 	if err != nil {
-		stop()
 		os.Exit(1)
+	}
+
+	if true {
+		return
 	}
 
 	// Push the container
@@ -139,7 +132,6 @@ func main() {
 	trace(cmd)
 	err = cmd.Run()
 	if err != nil {
-		stop()
 		os.Exit(1)
 	}
 }

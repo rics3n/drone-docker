@@ -2,20 +2,22 @@
 #
 #     docker build --rm=true -t plugins/drone-docker .
 
-FROM ubuntu:14.04
+FROM gliderlabs/alpine:3.2
+MAINTAINER platform-eng@c2fo.com
 
-RUN apt-get update -qq                                   \
-	&& apt-get -y install curl                       \ 
-		apt-transport-https                      \
-		ca-certificates                          \
-		curl                                     \
-		lxc                                      \
-		iptables                                 \
-	&& curl -sSL https://get.docker.com/ubuntu/ | sh \
-	&& rm -rf /var/lib/apt/lists/*
+# Let's start with some basic stuff.
+RUN apk-install iptables ca-certificates lxc e2fsprogs 
 
-ADD drone-docker /go/bin/
-ADD wrapdocker /bin/
+# Install Docker from Alpine repos
+RUN apk-install docker
 
+# Install the magic wrapper.
+ADD ./wrapdocker /usr/local/bin/wrapdocker
+ADD ./dmsetup /usr/local/bin/dmsetup
+RUN chmod +x /usr/local/bin/wrapdocker /usr/local/bin/dmsetup
+
+# Define additional metadata for our image.
+ADD ./drone-docker /go/bin/
 VOLUME /var/lib/docker
-ENTRYPOINT ["/go/bin/drone-docker"]
+VOLUME /root
+ENTRYPOINT ["/usr/local/bin/wrapdocker"]
